@@ -11,9 +11,9 @@ defmodule Day1 do
   def parse(input) do
     input
     |> String.split("\n", trim: true)
-    |> Enum.reduce({[], []}, fn x, {as, bs} ->
-      [a, b] = String.split(x) |> Enum.map(&String.to_integer/1)
-      {[a | as], [b | bs]}
+    |> Enum.reduce({[], []}, fn s, {xs, ys} ->
+      [x, y] = String.split(s) |> Enum.map(&String.to_integer/1)
+      {[x | xs], [y | ys]}
     end)
   end
 end
@@ -22,8 +22,8 @@ end
 ```elixir
 defmodule Day1.Part1 do
   def go(input) do
-    {as, bs} = Day1.parse(input)
-    Enum.zip_with(Enum.sort(as), Enum.sort(bs), &abs(&1 - &2)) |> Enum.sum()
+    {xs, ys} = Day1.parse(input)
+    Enum.zip_with(Enum.sort(xs), Enum.sort(ys), &abs(&1 - &2)) |> Enum.sum()
   end
 end
 
@@ -33,11 +33,66 @@ Day1.Part1.go(input1)
 ```elixir
 defmodule Day1.Part2 do
   def go(input) do
-    {as, bs} = Day1.parse(input)
-    freqs = Enum.frequencies(bs)
-    Enum.map(as, &(&1 * Map.get(freqs, &1, 0))) |> Enum.sum()
+    {xs, ys} = Day1.parse(input)
+    freqs = Enum.frequencies(ys)
+    Enum.map(xs, &(&1 * Map.get(freqs, &1, 0))) |> Enum.sum()
   end
 end
 
 Day1.Part2.go(input1)
+```
+
+## Day 2
+
+```elixir
+input2 = File.read!("/home/leif/Documents/aoc/2")
+```
+
+```elixir
+defmodule Day2 do
+  def parse(input) do
+    input
+    |> String.split("\n", trim: true)
+    |> Enum.map(fn row -> String.split(row) |> Enum.map(&String.to_integer/1) end)
+  end
+
+  def report_ok?(row) do
+    differences =
+      Enum.chunk_every(row, 2, 1, :discard)
+      |> Enum.map(fn [x, y] -> x - y end)
+
+    (Enum.all?(differences, &(&1 > 0)) or Enum.all?(differences, &(&1 < 0))) and
+      Enum.all?(differences, fn d ->
+        d = abs(d)
+        d >= 1 and d <= 3
+      end)
+  end
+end
+```
+
+```elixir
+defmodule Day2.Part1 do
+  def go(input) do
+    arr = Day2.parse(input)
+    Enum.count(arr, &Day2.report_ok?/1)
+  end
+end
+
+Day2.Part1.go(input2)
+```
+
+```elixir
+defmodule Day2.Part2 do
+  def go(input) do
+    Day2.parse(input)
+    |> Enum.count(fn report ->
+      Enum.any?(
+        0..(length(report) - 1),
+        fn i -> List.delete_at(report, i) |> Day2.report_ok?() end
+      )
+    end)
+  end
+end
+
+Day2.Part2.go(input2)
 ```
