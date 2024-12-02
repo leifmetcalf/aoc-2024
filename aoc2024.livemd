@@ -1,0 +1,43 @@
+# Advent of Code 2024
+
+## Day 1
+
+```elixir
+input1 = File.read!("/home/leif/Documents/aoc/1")
+```
+
+```elixir
+defmodule Day1 do
+  def parse(input) do
+    input
+    |> String.split("\n", trim: true)
+    |> Enum.reduce({[], []}, fn x, {as, bs} ->
+      [a, b] = String.split(x) |> Enum.map(&String.to_integer/1)
+      {[a | as], [b | bs]}
+    end)
+  end
+end
+```
+
+```elixir
+defmodule Day1.Part1 do
+  def go(input) do
+    {as, bs} = Day1.parse(input)
+    Enum.zip_with(Enum.sort(as), Enum.sort(bs), &abs(&1 - &2)) |> Enum.sum()
+  end
+end
+
+Day1.Part1.go(input1)
+```
+
+```elixir
+defmodule Day1.Part2 do
+  def go(input) do
+    {as, bs} = Day1.parse(input)
+    freqs = Enum.frequencies(bs)
+    Enum.map(as, &(&1 * Map.get(freqs, &1, 0))) |> Enum.sum()
+  end
+end
+
+Day1.Part2.go(input1)
+```
