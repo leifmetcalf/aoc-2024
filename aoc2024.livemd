@@ -1,59 +1,77 @@
 # Advent of Code 2024
 
-## Day 1
+## Common
 
 ```elixir
-input1 = File.read!("/home/leif/Documents/aoc/1")
+defmodule Prelude do
+  def parse_grid(input) do
+    input
+    |> String.split("\n", trim: true)
+    |> Enum.map(fn row -> String.split(row) |> Enum.map(&String.to_integer/1) end)
+  end
+
+  def transpose(xs) do
+    List.zip(xs) |> Enum.map(&Tuple.to_list/1)
+  end
+end
 ```
 
 ```elixir
+import Prelude
+```
+
+## Day 1
+
+```elixir
 defmodule Day1 do
+  def input() do
+    File.read!("/home/leif/Documents/aoc/1")
+  end
   def parse(input) do
-    input
-    |> String.split("\n", trim: true)
-    |> Enum.reduce({[], []}, fn s, {xs, ys} ->
-      [x, y] = String.split(s) |> Enum.map(&String.to_integer/1)
-      {[x | xs], [y | ys]}
-    end)
+    parse_grid(input) |> transpose()
   end
 end
 ```
 
 ```elixir
 defmodule Day1.Part1 do
+  @doc """
+  iex> Day1.input() |> Day1.Part1.go()
+  1506483
+  """
   def go(input) do
-    {xs, ys} = Day1.parse(input)
-    Enum.zip_with(Enum.sort(xs), Enum.sort(ys), &abs(&1 - &2)) |> Enum.sum()
+    Day1.parse(input)
+    |> Enum.map(&Enum.sort/1)
+    |> Enum.zip_with(fn [x, y] -> abs(x - y) end)
+    |> Enum.sum()
   end
 end
-
-Day1.Part1.go(input1)
 ```
 
 ```elixir
 defmodule Day1.Part2 do
+  @doc """
+  iex> Day1.input() |> Day1.Part2.go()
+  23126924
+  """
   def go(input) do
-    {xs, ys} = Day1.parse(input)
+    [xs, ys] = Day1.parse(input)
     freqs = Enum.frequencies(ys)
     Enum.map(xs, &(&1 * Map.get(freqs, &1, 0))) |> Enum.sum()
   end
 end
-
-Day1.Part2.go(input1)
 ```
 
 ## Day 2
 
 ```elixir
-input2 = File.read!("/home/leif/Documents/aoc/2")
-```
-
-```elixir
 defmodule Day2 do
+  def input() do
+    File.read!("/home/leif/Documents/aoc/2")
+  end
+
   def parse(input) do
-    input
-    |> String.split("\n", trim: true)
-    |> Enum.map(fn row -> String.split(row) |> Enum.map(&String.to_integer/1) end)
+    parse_grid(input)
   end
 
   def report_ok?(row) do
@@ -72,17 +90,22 @@ end
 
 ```elixir
 defmodule Day2.Part1 do
+  @doc """
+  iex> Day2.input() |> Day2.Part1.go()
+  220
+  """
   def go(input) do
-    arr = Day2.parse(input)
-    Enum.count(arr, &Day2.report_ok?/1)
+    Day2.parse(input) |> Enum.count(&Day2.report_ok?/1)
   end
 end
-
-Day2.Part1.go(input2)
 ```
 
 ```elixir
 defmodule Day2.Part2 do
+  @doc """
+  iex> Day2.input() |> Day2.Part2.go()
+  296
+  """
   def go(input) do
     Day2.parse(input)
     |> Enum.count(fn report ->
@@ -93,6 +116,4 @@ defmodule Day2.Part2 do
     end)
   end
 end
-
-Day2.Part2.go(input2)
 ```
