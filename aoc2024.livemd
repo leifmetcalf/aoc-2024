@@ -2,17 +2,89 @@
 
 ## Common
 
+[![Run in Livebook](https://livebook.dev/badge/v1/blue.svg)](https://livebook.dev/run?url=https%3A%2F%2Fraw.githubusercontent.com%2Fleifmetcalf%2Faoc-2024%2Frefs%2Fheads%2Ftrunk%2Faoc2024.livemd)
+
 ```elixir
+defmodule TopologicalSort do
+  def topological_sort(vertices, edges) do
+    {adj, n_parents} =
+      Enum.reduce(edges, {Map.new(vertices, &{&1, MapSet.new()}), Map.new(vertices, &{&1, 0})}, fn
+        {a, b}, {adj, n_parents} ->
+          {Map.update!(adj, a, &MapSet.put(&1, b)), Map.update!(n_parents, b, &(&1 + 1))}
+      end)
+
+    go(
+      adj,
+      n_parents,
+      Enum.filter(vertices, &(Map.get(n_parents, &1) == 0)) |> MapSet.new(),
+      []
+    )
+    |> Enum.reverse()
+  end
+
+  defp go(adj, n_parents, orphans, acc) do
+    case Enum.at(orphans, 0) do
+      nil ->
+        if length(acc) == Enum.count(adj) do
+          acc
+        else
+          nil
+        end
+
+      v ->
+        orphans = MapSet.delete(orphans, v)
+        children = Map.get(adj, v)
+
+        {n_parents, orphans} =
+          Enum.reduce(children, {n_parents, orphans}, fn child, {n_parents, orphans} ->
+            {n, n_parents} = Map.get_and_update!(n_parents, child, &{&1, &1 - 1})
+
+            orphans =
+              if n == 1 do
+                MapSet.put(orphans, child)
+              else
+                orphans
+              end
+
+            {n_parents, orphans}
+          end)
+
+        go(adj, n_parents, orphans, [v | acc])
+    end
+  end
+end
+
 defmodule Prelude do
-  def parse_grid(input) do
+  def parse_grid(input, pat \\ nil) do
     input
     |> String.split("\n", trim: true)
-    |> Enum.map(fn row -> String.split(row) |> Enum.map(&String.to_integer/1) end)
+    |> Enum.map(fn row ->
+      if(is_nil(pat), do: String.split(row), else: String.split(row, pat))
+      |> Enum.map(&String.to_integer/1)
+    end)
   end
 
   def transpose(xs) do
     List.zip(xs) |> Enum.map(&Tuple.to_list/1)
   end
+
+  def to_coords(grid) do
+    grid
+    |> Enum.with_index(fn row, r -> row |> Enum.with_index(fn x, c -> {{r, c}, x} end) end)
+    |> Enum.concat()
+    |> Map.new()
+  end
+
+  def pairs(xs) do
+    Enum.reduce(xs, {xs, []}, fn x, {[_ | rest], acc} ->
+      {rest, [Enum.map(rest, &{x, &1}) | acc]}
+    end)
+    |> elem(1)
+    |> Enum.reverse()
+    |> Enum.concat()
+  end
+
+  defdelegate topological_sort(vertices, edges), to: TopologicalSort
 end
 ```
 
@@ -74,16 +146,11 @@ defmodule Day2 do
     parse_grid(input)
   end
 
-  def report_ok?(row) do
-    differences =
-      Enum.chunk_every(row, 2, 1, :discard)
-      |> Enum.map(fn [x, y] -> x - y end)
-
-    (Enum.all?(differences, &(&1 > 0)) or Enum.all?(differences, &(&1 < 0))) and
-      Enum.all?(differences, fn d ->
-        d = abs(d)
-        d >= 1 and d <= 3
-      end)
+  def unsafe_index(row) do
+    Enum.chunk_every(row, 3, 1, :discard)
+    |> Enum.find_index(fn [x, y, z] ->
+      (y - x) * (z - y) <= 0 or abs(y - x) not in 1..3 or abs(z - y) not in 1..3
+    end)
   end
 end
 ```
@@ -95,7 +162,7 @@ defmodule Day2.Part1 do
   220
   """
   def go(input) do
-    Day2.parse(input) |> Enum.count(&Day2.report_ok?/1)
+    Day2.parse(input) |> Enum.count(&(Day2.unsafe_index(&1) |> is_nil()))
   end
 end
 ```
@@ -108,12 +175,203 @@ defmodule Day2.Part2 do
   """
   def go(input) do
     Day2.parse(input)
-    |> Enum.count(fn report ->
-      Enum.any?(
-        0..(length(report) - 1),
-        fn i -> List.delete_at(report, i) |> Day2.report_ok?() end
-      )
+    |> Enum.count(fn row ->
+      i = Day2.unsafe_index(row)
+
+      is_nil(i) or
+        Enum.any?(0..2, &(List.delete_at(row, i + &1) |> Day2.unsafe_index() |> is_nil()))
     end)
+  end
+end
+```
+
+## Day 3
+
+```elixir
+defmodule Day3 do
+  def input() do
+    File.read!("/home/leif/Documents/aoc/3")
+  end
+end
+```
+
+```elixir
+defmodule Day3.Part1 do
+  @doc """
+  iex> Day3.input() |> Day3.Part1.go()
+  166905464
+  """
+  def go(input) do
+    Regex.scan(~r/mul\((\d+),(\d+)\)/, input, capture: :all_but_first)
+    |> Enum.map(fn [x, y] -> String.to_integer(x) * String.to_integer(y) end)
+    |> Enum.sum()
+  end
+end
+```
+
+```elixir
+defmodule Day3.Part2 do
+  @doc """
+  iex> Day3.input() |> Day3.Part2.go()
+  72948684
+  """
+  def go(input) do
+    Regex.scan(~r/(mul)\((\d+),(\d+)\)|(do)\(\)|(don\'t)\(\)/, input, capture: :all_but_first)
+    |> Enum.reduce({0, 1}, fn
+      ["mul", x, y], {acc, mask} ->
+        {acc + mask * String.to_integer(x) * String.to_integer(y), mask}
+
+      ["", "", "", "do"], {acc, _} ->
+        {acc, 1}
+
+      ["", "", "", "", "don't"], {acc, _} ->
+        {acc, 0}
+    end)
+    |> elem(0)
+  end
+end
+```
+
+## Day 4
+
+```elixir
+defmodule Day4 do
+  def input() do
+    File.read!("/home/leif/Documents/aoc/4")
+  end
+
+  def parse(input) do
+    input
+    |> String.split()
+    |> Enum.map(fn line -> String.codepoints(line) |> Enum.map(&String.to_atom/1) end)
+  end
+end
+```
+
+```elixir
+defmodule Day4.Part1 do
+  @doc"""
+  iex> Day4.input() |> Day4.Part1.go()
+  2644
+  """
+  def go(input) do
+    grid = input |> Day4.parse()
+    map = grid |> to_coords()
+
+    Enum.with_index(grid, fn row, r ->
+      Enum.with_index(row, fn _, c ->
+        [
+          [{r, c}, {r + 1, c}, {r + 2, c}, {r + 3, c}],
+          [{r, c}, {r - 1, c}, {r - 2, c}, {r - 3, c}],
+          [{r, c}, {r, c + 1}, {r, c + 2}, {r, c + 3}],
+          [{r, c}, {r, c - 1}, {r, c - 2}, {r, c - 3}],
+          [{r, c}, {r + 1, c + 1}, {r + 2, c + 2}, {r + 3, c + 3}],
+          [{r, c}, {r + 1, c - 1}, {r + 2, c - 2}, {r + 3, c - 3}],
+          [{r, c}, {r - 1, c - 1}, {r - 2, c - 2}, {r - 3, c - 3}],
+          [{r, c}, {r - 1, c + 1}, {r - 2, c + 2}, {r - 3, c + 3}]
+        ]
+        |> Enum.count(fn line -> Enum.map(line, &map[&1]) == [:X, :M, :A, :S] end)
+      end)
+      |> Enum.sum()
+    end)
+    |> Enum.sum()
+  end
+end
+```
+
+```elixir
+defmodule Day4.Part2 do
+  @doc"""
+  iex> Day4.input() |> Day4.Part2.go()
+  1952
+  """
+  def go(input) do
+    grid = input |> Day4.parse()
+    map = grid |> to_coords()
+
+    nr = length(grid)
+    nc = grid |> List.first() |> length
+
+    0..(nr - 1)
+    |> Enum.map(fn r ->
+      0..(nc - 1)
+      |> Enum.count(fn c ->
+        case Enum.map(
+               [{r, c}, {r + 1, c + 1}, {r + 1, c - 1}, {r - 1, c + 1}, {r - 1, c - 1}],
+               &map[&1]
+             ) do
+          [:A, :M, :M, :S, :S] -> true
+          [:A, :M, :S, :M, :S] -> true
+          [:A, :S, :M, :S, :M] -> true
+          [:A, :S, :S, :M, :M] -> true
+          _ -> false
+        end
+      end)
+    end)
+    |> Enum.sum()
+  end
+end
+```
+
+## Day 5
+
+```elixir
+defmodule Day5 do
+  def input() do
+    File.read!("/home/leif/Documents/aoc/5")
+  end
+
+  def parse(input) do
+    [rules, updates] = String.split(input, "\n\n")
+
+    rules = parse_grid(rules, "|") |> Enum.map(&List.to_tuple/1)
+    updates = parse_grid(updates, ",")
+
+    {rules, updates}
+  end
+end
+```
+
+```elixir
+defmodule Day5.Part1 do
+  @doc """
+  iex> Day5.input() |> Day5.Part1.go()
+  7074
+  """
+  def go(input) do
+    {rules, updates} = input |> Day5.parse()
+
+    rules = MapSet.new(rules)
+
+    Enum.filter(updates, fn update ->
+      not Enum.any?(pairs(update), fn {a, b} -> {b, a} in rules end)
+    end)
+    |> Enum.map(fn update -> Enum.at(update, Integer.floor_div(length(update), 2)) end)
+    |> Enum.sum()
+  end
+end
+```
+
+```elixir
+defmodule Day5.Part2 do
+  @doc """
+  iex> Day5.input() |> Day5.Part2.go()
+  4828
+  """
+  def go(input) do
+    {rules, updates} = input |> Day5.parse()
+
+    rules = MapSet.new(rules)
+
+    Enum.reject(updates, fn update ->
+      not Enum.any?(pairs(update), fn {a, b} -> {b, a} in rules end)
+    end)
+    |> Enum.map(fn update ->
+      relevant_rules = Enum.filter(rules, fn {a, b} -> a in update and b in update end)
+      sorted = topological_sort(update, relevant_rules)
+      Enum.at(sorted, Integer.floor_div(length(sorted), 2))
+    end)
+    |> Enum.sum()
   end
 end
 ```
