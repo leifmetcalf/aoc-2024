@@ -16,7 +16,7 @@ defmodule TopologicalSort do
     go(
       adj,
       n_parents,
-      Enum.filter(vertices, &(Map.get(n_parents, &1) == 0)),
+      Enum.filter(vertices, &(n_parents[&1] == 0)),
       []
     )
     |> Enum.reverse()
@@ -32,14 +32,14 @@ defmodule TopologicalSort do
         end
 
       [v | orphans] ->
-        children = Map.get(adj, v)
+        children = adj[v]
 
         {n_parents, orphans} =
           Enum.reduce(children, {n_parents, orphans}, fn child, {n_parents, orphans} ->
-            {n, n_parents} = Map.get_and_update!(n_parents, child, &{&1, &1 - 1})
+            n_parents = Map.update!(n_parents, child, &(&1 - 1))
 
             orphans =
-              if n == 1 do
+              if n_parents[child] == 0 do
                 [child | orphans]
               else
                 orphans
@@ -436,6 +436,10 @@ end
 
 ```elixir
 defmodule Day6.Part1 do
+  @doc"""
+  iex> Day6.input() |> Day6.Part1.go()
+  5239
+  """
   def go(input) do
     grid = input |> Day6.parse()
     guard_pos = find_index_2d(grid, &(&1 == ?^))
@@ -443,8 +447,6 @@ defmodule Day6.Part1 do
     Day6.trodden(coords, guard_pos) |> Enum.count()
   end
 end
-
-Day6.input() |> Day6.Part1.go()
 ```
 
 ```elixir
@@ -463,10 +465,8 @@ defmodule Day6.Part2 do
 
     Enum.count(
       trodden,
-      fn p -> has_loop?(Map.put(coords, p, ?#), guard_pos) end
+      &has_loop?(Map.put(coords, &1, ?#), guard_pos)
     )
   end
 end
-
-Day6.input() |> Day6.Part2.go()
 ```
