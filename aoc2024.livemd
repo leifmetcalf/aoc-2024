@@ -8,31 +8,30 @@
 defmodule TopologicalSort do
   def topological_sort(vertices, edges) do
     {adj, n_parents} =
-      Enum.reduce(edges, {Map.new(vertices, &{&1, MapSet.new()}), Map.new(vertices, &{&1, 0})}, fn
+      Enum.reduce(edges, {Map.new(vertices, &{&1, []}), Map.new(vertices, &{&1, 0})}, fn
         {a, b}, {adj, n_parents} ->
-          {Map.update!(adj, a, &MapSet.put(&1, b)), Map.update!(n_parents, b, &(&1 + 1))}
+          {Map.update!(adj, a, &[b | &1]), Map.update!(n_parents, b, &(&1 + 1))}
       end)
 
     go(
       adj,
       n_parents,
-      Enum.filter(vertices, &(Map.get(n_parents, &1) == 0)) |> MapSet.new(),
+      Enum.filter(vertices, &(Map.get(n_parents, &1) == 0)),
       []
     )
     |> Enum.reverse()
   end
 
   defp go(adj, n_parents, orphans, acc) do
-    case Enum.at(orphans, 0) do
-      nil ->
+    case orphans do
+      [] ->
         if length(acc) == Enum.count(adj) do
           acc
         else
           nil
         end
 
-      v ->
-        orphans = MapSet.delete(orphans, v)
+      [v | orphans] ->
         children = Map.get(adj, v)
 
         {n_parents, orphans} =
@@ -41,7 +40,7 @@ defmodule TopologicalSort do
 
             orphans =
               if n == 1 do
-                MapSet.put(orphans, child)
+                [child | orphans]
               else
                 orphans
               end
@@ -68,7 +67,7 @@ defmodule Prelude do
     List.zip(xs) |> Enum.map(&Tuple.to_list/1)
   end
 
-  def to_coords(grid) do
+  def grid_to_map(grid) do
     grid
     |> Enum.with_index(fn row, r -> row |> Enum.with_index(fn x, c -> {{r, c}, x} end) end)
     |> Enum.concat()
@@ -82,6 +81,23 @@ defmodule Prelude do
     |> elem(1)
     |> Enum.reverse()
     |> Enum.concat()
+  end
+
+  def find_index_2d(grid, f) do
+    Enum.find_value(Stream.with_index(grid), fn {row, r} ->
+      if c = Enum.find_index(row, f), do: {r, c}
+    end)
+  end
+
+  def contains_dup?(enumerable) do
+    enumerable
+    |> Enum.reduce_while(MapSet.new(), fn x, acc ->
+      if x in acc, do: {:halt, :contains_dup}, else: {:cont, MapSet.put(acc, x)}
+    end) == :contains_dup
+  end
+
+  def indices(enumerable) do
+    Map.new(Stream.with_index(enumerable))
   end
 
   defdelegate topological_sort(vertices, edges), to: TopologicalSort
@@ -250,16 +266,18 @@ end
 
 ```elixir
 defmodule Day4.Part1 do
-  @doc"""
+  @doc """
   iex> Day4.input() |> Day4.Part1.go()
   2644
   """
   def go(input) do
     grid = input |> Day4.parse()
-    map = grid |> to_coords()
+    map = grid |> grid_to_map()
 
-    Enum.with_index(grid, fn row, r ->
-      Enum.with_index(row, fn _, c ->
+    for(
+      r <- 0..(length(grid) - 1),
+      c <- 0..(length(List.first(grid)) - 1),
+      do:
         [
           [{r, c}, {r + 1, c}, {r + 2, c}, {r + 3, c}],
           [{r, c}, {r - 1, c}, {r - 2, c}, {r - 3, c}],
@@ -271,9 +289,7 @@ defmodule Day4.Part1 do
           [{r, c}, {r - 1, c + 1}, {r - 2, c + 2}, {r - 3, c + 3}]
         ]
         |> Enum.count(fn line -> Enum.map(line, &map[&1]) == [:X, :M, :A, :S] end)
-      end)
-      |> Enum.sum()
-    end)
+    )
     |> Enum.sum()
   end
 end
@@ -281,33 +297,32 @@ end
 
 ```elixir
 defmodule Day4.Part2 do
-  @doc"""
+  @doc """
   iex> Day4.input() |> Day4.Part2.go()
   1952
   """
   def go(input) do
     grid = input |> Day4.parse()
-    map = grid |> to_coords()
+    map = grid |> grid_to_map()
 
-    nr = length(grid)
-    nc = grid |> List.first() |> length
-
-    0..(nr - 1)
-    |> Enum.map(fn r ->
-      0..(nc - 1)
-      |> Enum.count(fn c ->
-        case Enum.map(
-               [{r, c}, {r + 1, c + 1}, {r + 1, c - 1}, {r - 1, c + 1}, {r - 1, c - 1}],
-               &map[&1]
-             ) do
-          [:A, :M, :M, :S, :S] -> true
-          [:A, :M, :S, :M, :S] -> true
-          [:A, :S, :M, :S, :M] -> true
-          [:A, :S, :S, :M, :M] -> true
-          _ -> false
+    for(
+      r <- 0..(length(grid) - 1),
+      c <- 0..(length(List.first(grid)) - 1),
+      do:
+        if Enum.map(
+             [{r, c}, {r + 1, c + 1}, {r + 1, c - 1}, {r - 1, c + 1}, {r - 1, c - 1}],
+             &map[&1]
+           ) in [
+             [:A, :M, :M, :S, :S],
+             [:A, :M, :S, :M, :S],
+             [:A, :S, :M, :S, :M],
+             [:A, :S, :S, :M, :M]
+           ] do
+          1
+        else
+          0
         end
-      end)
-    end)
+    )
     |> Enum.sum()
   end
 end
@@ -329,6 +344,16 @@ defmodule Day5 do
 
     {rules, updates}
   end
+
+  def sorted?(update, rules) do
+    indices = indices(update)
+
+    Enum.all?(rules, fn {a, b} ->
+      i = indices[a]
+      j = indices[b]
+      is_nil(i) or is_nil(j) or i < j
+    end)
+  end
 end
 ```
 
@@ -343,9 +368,7 @@ defmodule Day5.Part1 do
 
     rules = MapSet.new(rules)
 
-    Enum.filter(updates, fn update ->
-      not Enum.any?(pairs(update), fn {a, b} -> {b, a} in rules end)
-    end)
+    Enum.filter(updates, &Day5.sorted?(&1, rules))
     |> Enum.map(fn update -> Enum.at(update, Integer.floor_div(length(update), 2)) end)
     |> Enum.sum()
   end
@@ -363,15 +386,87 @@ defmodule Day5.Part2 do
 
     rules = MapSet.new(rules)
 
-    Enum.reject(updates, fn update ->
-      not Enum.any?(pairs(update), fn {a, b} -> {b, a} in rules end)
-    end)
-    |> Enum.map(fn update ->
+    Enum.map(updates, fn update ->
       relevant_rules = Enum.filter(rules, fn {a, b} -> a in update and b in update end)
-      sorted = topological_sort(update, relevant_rules)
-      Enum.at(sorted, Integer.floor_div(length(sorted), 2))
+
+      if Day5.sorted?(update, rules) do
+        0
+      else
+        sorted = topological_sort(update, relevant_rules)
+        Enum.at(sorted, Integer.floor_div(length(sorted), 2))
+      end
     end)
     |> Enum.sum()
   end
 end
+```
+
+## Day 6
+
+```elixir
+defmodule Day6 do
+  def input() do
+    File.read!("/home/leif/Documents/aoc/6")
+  end
+
+  def parse(input) do
+    input
+    |> String.split()
+    |> Enum.map(fn line -> String.to_charlist(line) end)
+  end
+
+  def wander(coords, guard_pos) do
+    Stream.iterate({guard_pos, {-1, 0}}, fn {{r, c}, {dr, dc}} ->
+      {dr, dc} =
+        Stream.iterate({dr, dc}, fn {dr, dc} -> {dc, -dr} end)
+        |> Enum.find(fn {dr, dc} -> coords[{r + dr, c + dc}] != ?# end)
+
+      {{r + dr, c + dc}, {dr, dc}}
+    end)
+  end
+
+  def trodden(coords, guard_pos) do
+    Day6.wander(coords, guard_pos)
+    |> Stream.map(&elem(&1, 0))
+    |> Stream.uniq()
+    |> Stream.take_while(&Map.has_key?(coords, &1))
+  end
+end
+```
+
+```elixir
+defmodule Day6.Part1 do
+  def go(input) do
+    grid = input |> Day6.parse()
+    guard_pos = find_index_2d(grid, &(&1 == ?^))
+    coords = grid_to_map(grid)
+    Day6.trodden(coords, guard_pos) |> Enum.count()
+  end
+end
+
+Day6.input() |> Day6.Part1.go()
+```
+
+```elixir
+defmodule Day6.Part2 do
+  defp has_loop?(coords, guard_pos) do
+    Day6.wander(coords, guard_pos)
+    |> Stream.take_while(&Map.has_key?(coords, elem(&1, 0)))
+    |> contains_dup?()
+  end
+
+  def go(input) do
+    grid = input |> Day6.parse()
+    guard_pos = find_index_2d(grid, &(&1 == ?^))
+    coords = grid_to_map(grid)
+    trodden = Day6.trodden(coords, guard_pos)
+
+    Enum.count(
+      trodden,
+      fn p -> has_loop?(Map.put(coords, p, ?#), guard_pos) end
+    )
+  end
+end
+
+Day6.input() |> Day6.Part2.go()
 ```
