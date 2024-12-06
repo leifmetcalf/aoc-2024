@@ -7,35 +7,30 @@
 ```elixir
 defmodule TopologicalSort do
   def topological_sort(vertices, edges) do
-    {adj, n_parents} =
-      Enum.reduce(edges, {Map.new(vertices, &{&1, []}), Map.new(vertices, &{&1, 0})}, fn
-        {a, b}, {adj, n_parents} ->
-          {Map.update!(adj, a, &[b | &1]), Map.update!(n_parents, b, &(&1 + 1))}
+    adj =
+      Enum.reduce(edges, Map.new(vertices, &{&1, []}), fn
+        {a, b}, adj -> Map.update!(adj, a, &[b | &1])
       end)
 
-    go(
-      adj,
-      n_parents,
-      Enum.filter(vertices, &(n_parents[&1] == 0)),
-      []
-    )
+    n_parents =
+      Enum.reduce(edges, Map.new(vertices, &{&1, 0}), fn
+        {a, b}, n_parents -> Map.update!(n_parents, b, &(&1 + 1))
+      end)
+
+    orphans = Enum.filter(vertices, &(n_parents[&1] == 0))
+
+    go(adj, n_parents, orphans, [])
     |> Enum.reverse()
   end
 
   defp go(adj, n_parents, orphans, acc) do
     case orphans do
       [] ->
-        if length(acc) == Enum.count(adj) do
-          acc
-        else
-          nil
-        end
+        if length(acc) == Enum.count(adj), do: acc
 
       [v | orphans] ->
-        children = adj[v]
-
         {n_parents, orphans} =
-          Enum.reduce(children, {n_parents, orphans}, fn child, {n_parents, orphans} ->
+          Enum.reduce(adj[v], {n_parents, orphans}, fn child, {n_parents, orphans} ->
             n_parents = Map.update!(n_parents, child, &(&1 - 1))
 
             orphans =
