@@ -14,37 +14,34 @@ defmodule TopologicalSort do
 
     n_parents =
       Enum.reduce(edges, Map.new(vertices, &{&1, 0}), fn
-        {a, b}, n_parents -> Map.update!(n_parents, b, &(&1 + 1))
+        {_, b}, n_parents -> Map.update!(n_parents, b, &(&1 + 1))
       end)
 
     orphans = Enum.filter(vertices, &(n_parents[&1] == 0))
 
-    go(adj, n_parents, orphans, [])
-    |> Enum.reverse()
-  end
+    sorted =
+      Stream.unfold({n_parents, orphans}, fn
+        {_, []} ->
+          nil
 
-  defp go(adj, n_parents, orphans, acc) do
-    case orphans do
-      [] ->
-        if length(acc) == Enum.count(adj), do: acc
+        {n_parents, [v | orphans]} ->
+          {v,
+           Enum.reduce(adj[v], {n_parents, orphans}, fn child, {n_parents, orphans} ->
+             n_parents = Map.update!(n_parents, child, &(&1 - 1))
 
-      [v | orphans] ->
-        {n_parents, orphans} =
-          Enum.reduce(adj[v], {n_parents, orphans}, fn child, {n_parents, orphans} ->
-            n_parents = Map.update!(n_parents, child, &(&1 - 1))
+             orphans =
+               if n_parents[child] == 0 do
+                 [child | orphans]
+               else
+                 orphans
+               end
 
-            orphans =
-              if n_parents[child] == 0 do
-                [child | orphans]
-              else
-                orphans
-              end
+             {n_parents, orphans}
+           end)}
+      end)
+      |> Enum.reverse()
 
-            {n_parents, orphans}
-          end)
-
-        go(adj, n_parents, orphans, [v | acc])
-    end
+    if length(sorted) == length(vertices), do: sorted
   end
 end
 
