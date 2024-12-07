@@ -28,14 +28,7 @@ defmodule TopologicalSort do
           {v,
            Enum.reduce(adj[v], {n_parents, orphans}, fn child, {n_parents, orphans} ->
              n_parents = Map.update!(n_parents, child, &(&1 - 1))
-
-             orphans =
-               if n_parents[child] == 0 do
-                 [child | orphans]
-               else
-                 orphans
-               end
-
+             orphans = if n_parents[child] == 0, do: [child | orphans], else: orphans
              {n_parents, orphans}
            end)}
       end)
@@ -361,7 +354,7 @@ defmodule Day5.Part1 do
     rules = MapSet.new(rules)
 
     Enum.filter(updates, &Day5.sorted?(&1, rules))
-    |> Enum.map(fn update -> Enum.at(update, Integer.floor_div(length(update), 2)) end)
+    |> Enum.map(fn update -> Enum.at(update, div(length(update), 2)) end)
     |> Enum.sum()
   end
 end
@@ -385,7 +378,7 @@ defmodule Day5.Part2 do
         0
       else
         sorted = topological_sort(update, relevant_rules)
-        Enum.at(sorted, Integer.floor_div(length(sorted), 2))
+        Enum.at(sorted, div(length(sorted), 2))
       end
     end)
     |> Enum.sum()
@@ -459,6 +452,52 @@ defmodule Day6.Part2 do
       trodden,
       &has_loop?(Map.put(coords, &1, ?#), guard_pos)
     )
+  end
+end
+```
+
+## Day 7
+
+```elixir
+defmodule Day7 do
+  def input() do
+    File.read!("/home/leif/Documents/aoc/7")
+  end
+
+  def parse(input) do
+    input
+    |> String.split("\n", trim: true)
+    |> Enum.map(fn line ->
+      [objective, xs] = String.split(line, ": ")
+      objective = String.to_integer(objective)
+      xs = String.split(xs) |> Enum.map(&String.to_integer/1)
+      {objective, xs}
+    end)
+  end
+
+  def go(input) do
+    input
+    |> parse()
+    |> Stream.filter(fn {objective, xs} -> go_rec(objective, Enum.reverse(xs)) end)
+    |> Stream.map(&elem(&1, 0))
+    |> Enum.sum()
+  end
+
+  defp go_rec(obj, [x]) do
+    obj == x
+  end
+
+  defp go_rec(obj, [x | xs]) do
+    next_power_of_10 =
+      cond do
+        x < 10 -> 10
+        x < 100 -> 100
+        x < 1000 -> 1000
+      end
+
+    (rem(obj, next_power_of_10) == x and go_rec(div(obj, next_power_of_10), xs)) or
+      (rem(obj, x) == 0 and go_rec(div(obj, x), xs)) or
+      (x <= obj and go_rec(obj - x, xs))
   end
 end
 ```
