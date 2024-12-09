@@ -52,6 +52,10 @@ defmodule Prelude do
     List.zip(xs) |> Enum.map(&Tuple.to_list/1)
   end
 
+  def list_to_map(xs) do
+    xs |> Stream.with_index(fn x, i -> {i, x} end) |> Map.new()
+  end
+
   def grid_to_map(grid) do
     grid
     |> Enum.with_index(fn row, r -> row |> Enum.with_index(fn x, c -> {{r, c}, x} end) end)
@@ -81,8 +85,20 @@ defmodule Prelude do
     end) == :contains_dup
   end
 
-  def indices(enumerable) do
+  def indices_uniq(enumerable) do
     Map.new(Stream.with_index(enumerable))
+  end
+
+  def indices_2d(grid) do
+    grid
+    |> grid_to_map
+    |> Enum.reduce(%{}, fn {p, x}, acc ->
+      update_in(acc, [x], fn
+        xs ->
+          xs = if is_nil(xs), do: [], else: xs
+          [p | xs]
+      end)
+    end)
   end
 
   defdelegate topological_sort(vertices, edges), to: TopologicalSort
@@ -331,7 +347,7 @@ defmodule Day5 do
   end
 
   def sorted?(update, rules) do
-    indices = indices(update)
+    indices = indices_uniq(update)
 
     Enum.all?(rules, fn {a, b} ->
       i = indices[a]
@@ -500,4 +516,165 @@ defmodule Day7 do
       (x <= obj and go_rec(obj - x, xs))
   end
 end
+```
+
+## Day 8
+
+```elixir
+defmodule Day8 do
+  def input() do
+    File.read!("/home/leif/Documents/aoc/8")
+  end
+
+  def parse(input) do
+    input
+    |> String.split()
+    |> Enum.map(fn line -> String.to_charlist(line) end)
+  end
+end
+```
+
+```elixir
+defmodule Day8.Part2 do
+  @doc """
+  iex> Day8.input() |> Day8.Part2.go()
+  1019
+  """
+  def go(input) do
+    grid = Day8.parse(input)
+
+    rows = length(grid)
+    cols = length(List.first(grid))
+
+    Day8.parse(input)
+    |> indices_2d
+    |> Map.delete(?.)
+    |> Stream.flat_map(fn {_, ps} ->
+      pairs(ps)
+      |> Stream.flat_map(fn {{r1, c1}, {r2, c2}} ->
+        Stream.concat(
+          Stream.iterate({r1, c1}, fn {r, c} -> {r + r2 - r1, c + c2 - c1} end)
+          |> Stream.take_while(fn {r, c} -> r in 0..(rows - 1) and c in 0..(cols - 1) end),
+          Stream.iterate({r1, c1}, fn {r, c} -> {r + r1 - r2, c + c1 - c2} end)
+          |> Stream.take_while(fn {r, c} -> r in 0..(rows - 1) and c in 0..(cols - 1) end)
+        )
+      end)
+    end)
+    |> Stream.uniq()
+    |> Enum.count()
+  end
+end
+```
+
+## Day 9
+
+```elixir
+defmodule Day9 do
+  def input() do
+    """
+    2333133121414131402
+    """
+
+    File.read!("/home/leif/Documents/aoc/9")
+  end
+
+  def checksum(arr) do
+    arr
+    |> Enum.map(fn
+      {_, nil} -> 0
+      {i, x} -> i * x
+    end)
+    |> Enum.sum()
+  end
+end
+```
+
+```elixir
+defmodule Day9.Part1 do
+  require Integer
+
+  def go(input) do
+    arr =
+      input
+      |> String.trim()
+      |> String.codepoints()
+      |> Stream.map(&String.to_integer/1)
+      |> Stream.with_index()
+      |> Enum.flat_map(fn {x, i} ->
+        Stream.duplicate(if(Integer.is_even(i), do: div(i, 2), else: nil), x)
+      end)
+
+    i = Enum.find_index(arr, &is_nil/1)
+    j = length(arr) - 1
+
+    map = list_to_map(arr)
+
+    Stream.iterate({map, i, j}, fn
+      {map, i, j} ->
+        cond do
+          is_nil(map[j]) ->
+            {map, i, j - 1}
+
+          not is_nil(map[i]) ->
+            {map, i + 1, j}
+
+          true ->
+            {%{map | i => map[j], j => map[i]}, i + 1, j - 1}
+        end
+    end)
+    |> Enum.find(fn {_, i, j} -> i >= j end)
+    |> elem(0)
+    |> Day9.checksum()
+  end
+end
+
+Day9.Part1.go(Day9.input())
+```
+
+```elixir
+require Integer
+
+input = Day9.input()
+
+chunks =
+  input
+  |> String.trim()
+  |> String.codepoints()
+  |> Stream.map(&String.to_integer/1)
+  |> Enum.chunk_every(2, 2, [0])
+
+n = length(chunks)
+
+frees = Enum.map(chunks, fn [_, free] -> free end)
+files = Enum.map(chunks, fn [file, _] -> file end)
+file_map = list_to_map(files)
+
+chunk_map =
+  Enum.reduce(
+    Enum.reverse(Stream.with_index(files)),
+    Map.new(Stream.with_index(frees), fn {free, i} -> {i, {free, []}} end),
+    fn
+      {file, i}, map ->
+        case Enum.find(0..(i - 1)//1, fn i -> map[i] |> elem(0) >= file end) do
+          nil ->
+            map |> Map.update!(i, fn {free, files} -> {free, files ++ [i]} end)
+
+          j ->
+            map
+            |> Map.update!(j, fn {free, files} -> {free - file, [i | files]} end)
+            |> Map.update!(i - 1, fn {free, files} -> {free + file, files} end)
+        end
+    end
+  )
+
+Enum.flat_map(0..(n - 1), fn i ->
+  {free, files} = chunk_map[i]
+
+  Stream.concat(
+    Stream.flat_map(Enum.reverse(files), fn j -> Stream.duplicate(j, file_map[j]) end),
+    Stream.duplicate(nil, free)
+  )
+end)
+|> list_to_map()
+|> Day9.checksum()
 ```
