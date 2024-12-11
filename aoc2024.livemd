@@ -1,6 +1,29 @@
 # Advent of Code 2024
 
+```elixir
+Mix.install([
+  {:req, "~> 0.5.8"}
+])
+```
+
 ## Common
+
+```elixir
+session = File.read!("/home/leif/Documents/aoc/session") |> String.trim()
+
+Enum.each(1..11, fn n ->
+  file = "/home/leif/Documents/aoc/#{n}"
+
+  if not File.exists?(file) do
+    File.write!(
+      file,
+      Req.get!("https://adventofcode.com/2024/day/#{n}/input",
+        headers: %{cookie: "session=#{session}"}
+      ).body
+    )
+  end
+end)
+```
 
 [![Run in Livebook](https://livebook.dev/badge/v1/blue.svg)](https://livebook.dev/run?url=https%3A%2F%2Fraw.githubusercontent.com%2Fleifmetcalf%2Faoc-2024%2Frefs%2Fheads%2Ftrunk%2Faoc2024.livemd)
 
@@ -577,15 +600,6 @@ defmodule Day9 do
 
     File.read!("/home/leif/Documents/aoc/9")
   end
-
-  def checksum(arr) do
-    arr
-    |> Enum.map(fn
-      {_, nil} -> 0
-      {i, x} -> i * x
-    end)
-    |> Enum.sum()
-  end
 end
 ```
 
@@ -593,6 +607,10 @@ end
 defmodule Day9.Part1 do
   require Integer
 
+  @doc """
+  iex> Day9.input() |> Day9.Part1.go()
+  6390180901651
+  """
   def go(input) do
     arr =
       input
@@ -624,57 +642,114 @@ defmodule Day9.Part1 do
     end)
     |> Enum.find(fn {_, i, j} -> i >= j end)
     |> elem(0)
-    |> Day9.checksum()
+    |> Enum.map(fn
+      {_, nil} -> 0
+      {i, x} -> i * x
+    end)
+    |> Enum.sum()
   end
 end
-
-Day9.Part1.go(Day9.input())
 ```
 
 ```elixir
-require Integer
+defmodule Day9.Part2 do
+  require Integer
 
-input = Day9.input()
+  @doc """
+  iex> Day9.input() |> Day9.Part2.go()
+  6412390114238
+  """
+  def go(input) do
+    {_, files, frees} =
+      input
+      |> String.trim()
+      |> String.codepoints()
+      |> Stream.map(&String.to_integer/1)
+      |> Enum.chunk_every(2, 2, [0])
+      |> Enum.reduce({0, [], []}, fn [file, free], {i, files, frees} ->
+        {i + file + free, [{i, file} | files], [{i + file, free} | frees]}
+      end)
 
-chunks =
-  input
-  |> String.trim()
-  |> String.codepoints()
-  |> Stream.map(&String.to_integer/1)
-  |> Enum.chunk_every(2, 2, [0])
+    frees = Map.new(Stream.with_index(Enum.reverse(frees)), fn {i, x} -> {x, i} end)
 
-n = length(chunks)
-
-frees = Enum.map(chunks, fn [_, free] -> free end)
-files = Enum.map(chunks, fn [file, _] -> file end)
-file_map = list_to_map(files)
-
-chunk_map =
-  Enum.reduce(
-    Enum.reverse(Stream.with_index(files)),
-    Map.new(Stream.with_index(frees), fn {free, i} -> {i, {free, []}} end),
-    fn
-      {file, i}, map ->
-        case Enum.find(0..(i - 1)//1, fn i -> map[i] |> elem(0) >= file end) do
+    Enum.reduce(Enum.reverse(Stream.with_index(Enum.reverse(files))), {0, frees}, fn
+      {{file_index, file}, file_order}, {acc, frees} ->
+        case Enum.find(0..(file_order - 1)//1, fn i -> frees[i] |> elem(1) >= file end) do
           nil ->
-            map |> Map.update!(i, fn {free, files} -> {free, files ++ [i]} end)
+            {acc + file_order * div((file_index + file_index + file - 1) * file, 2), frees}
 
-          j ->
-            map
-            |> Map.update!(j, fn {free, files} -> {free - file, [i | files]} end)
-            |> Map.update!(i - 1, fn {free, files} -> {free + file, files} end)
+          free_order ->
+            {free_index, free} = frees[free_order]
+
+            {acc + file_order * div((free_index + free_index + file - 1) * file, 2),
+             %{frees | free_order => {free_index + file, free - file}}}
         end
+    end)
+    |> elem(0)
+  end
+end
+```
+
+## Day 10
+
+## Day 11
+
+```elixir
+defmodule Day11 do
+  require Integer
+
+  def input() do
+    File.read!("/home/leif/Documents/aoc/11")
+  end
+
+  @doc """
+  iex> Day11.input() |> Day11.go(75)
+  221280540398419
+  """
+
+  def go(input, n) do
+    input
+    |> String.split()
+    |> Enum.map(&String.to_integer/1)
+    |> Enum.reduce({0, Map.new()}, fn x, {acc, memo} ->
+      {r, memo} = rec(memo, n, x)
+      {acc + r, memo}
+    end)
+    |> elem(0)
+  end
+
+  def rec(memo, 0, _) do
+    {1, memo}
+  end
+
+  def rec(memo, i, x) do
+    case memo[{i, x}] do
+      nil ->
+        {r, memo} =
+          case x do
+            0 ->
+              rec(memo, i - 1, 1)
+
+            _ ->
+              len = length(Integer.digits(x))
+
+              cond do
+                Integer.is_even(len) ->
+                  mask = 10 ** div(len, 2)
+                  {r1, memo} = rec(memo, i - 1, div(x, mask))
+                  {r2, memo} = rec(memo, i - 1, rem(x, mask))
+                  {r1 + r2, memo}
+
+                true ->
+                  rec(memo, i - 1, 2024 * x)
+              end
+          end
+
+        {r, Map.put(memo, {i, x}, r)}
+
+      r ->
+        {r, memo}
     end
-  )
-
-Enum.flat_map(0..(n - 1), fn i ->
-  {free, files} = chunk_map[i]
-
-  Stream.concat(
-    Stream.flat_map(Enum.reverse(files), fn j -> Stream.duplicate(j, file_map[j]) end),
-    Stream.duplicate(nil, free)
-  )
-end)
-|> list_to_map()
-|> Day9.checksum()
+  end
+end
 ```
